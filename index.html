@@ -1,15 +1,28 @@
-<html lang="en">
-	<head>
-		<title>three.js - WebGPU - Particles</title>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-		<link type="text/css" rel="stylesheet" href="main.css">
-	</head>
-	<body>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="icon" href="data:">
+<title>forkedthree.js - WebGPU - Particles</title>
+</head>
+<body>
 
-		<div id="info">
-			<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> WebGPU - Particles
-		</div>
+<div id="info">
+<h1>takibi clock</h1>
+	forked <a href=https://threejs.org/examples/?q=gpu#webgpu_particles>WebGPU - Particles</a> by <a href="https://threejs.org/">three.js</a><br>
+	<a href=https://github.com/code4fukui/vr-takibi/>src on GitHub</a>
+</div>
+<style>
+body {
+	margin: 0;
+}
+#info {
+	position: absolute;
+	top: 1em;
+	left: 1em;
+	background-color: gray;
+	padding: .5em;
+}
+a {
+	color: white !important;
+}
+</style>
 <!--
 		<script type="importmap">
 			{
@@ -30,154 +43,181 @@
   }
 }
 </script>
-		<script type="module">
+<script type="module">
 
-			import * as THREE from 'three';
-			import { range, texture, mix, uv, color, positionLocal, timerLocal, SpriteNodeMaterial } from 'three/nodes';
+import * as THREE from 'three';
+import { range, texture, mix, uv, color, positionLocal, timerLocal, SpriteNodeMaterial } from 'three/nodes';
 
-			import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
-			import WebGPU from 'three/addons/capabilities/WebGPU.js';
-			import WebGL from 'three/addons/capabilities/WebGL.js';
+import WebGPU from 'three/addons/capabilities/WebGPU.js';
+import WebGL from 'three/addons/capabilities/WebGL.js';
 
-			import WebGPURenderer from 'three/addons/renderers/webgpu/WebGPURenderer.js';
+import WebGPURenderer from 'three/addons/renderers/webgpu/WebGPURenderer.js';
 
-			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+//import { XRButton } from 'https://code4fukui.github.io/fisheyes-viewer/XRButton.js';
+import { XRButton } from './XRButton.js';
+import { getClockPos } from "./getClockPos.js";
 
-			let camera, scene, renderer;
-			let controls;
+if ( WebGPU.isAvailable() === false && WebGL.isWebGL2Available() === false ) {
+	document.body.appendChild( WebGPU.getErrorMessage() );
+	throw new Error( 'No WebGPU or WebGL2 support' );
+}
 
-			init();
+const camera = new THREE.PerspectiveCamera( 60, innerWidth / innerHeight, 1, 5000 );
+camera.position.set( 1300, 500, 0 );
 
-			function init() {
+const scene = new THREE.Scene();
+//scene.fogNode = rangeFog( color( 0x0000ff ), 1500, 2100 );
 
-				if ( WebGPU.isAvailable() === false && WebGL.isWebGL2Available() === false ) {
+// textures
 
-					document.body.appendChild( WebGPU.getErrorMessage() );
+const textureLoader = new THREE.TextureLoader();
+const map = textureLoader.load( './smoke1.png' );
 
-					throw new Error( 'No WebGPU or WebGL2 support' );
+// create nodes
 
-				}
+const lifeRange = range( .1, 1.0 );
+const offsetRange = range( new THREE.Vector3( - 2, 3, - 2 ), new THREE.Vector3( 2, 5, 2 ) );
 
-				const { innerWidth, innerHeight } = window;
+const timer = timerLocal( .2, 1/*100000*/ ); // @TODO: need to work with 64-bit precision
 
-				camera = new THREE.PerspectiveCamera( 60, innerWidth / innerHeight, 1, 5000 );
-				camera.position.set( 1300, 500, 0 );
+const lifeTime = timer.mul( lifeRange ).mod( 1 );
+const scaleRange = range( .3, 2 );
+const rotateRange = range( .1, 4 );
 
-				scene = new THREE.Scene();
-				//scene.fogNode = rangeFog( color( 0x0000ff ), 1500, 2100 );
+const life = lifeTime.div( lifeRange );
 
-				// textures
+const fakeLightEffect = positionLocal.y.oneMinus().max( 0.2 );
 
-				const textureLoader = new THREE.TextureLoader();
-				const map = textureLoader.load( './smoke1.png' );
+const textureNode = texture( map, uv().rotateUV( timer.mul( rotateRange ) ) );
 
-				// create nodes
+const opacityNode = textureNode.a.mul( life.oneMinus() );
 
-				const lifeRange = range( .1, 1 );
-				const offsetRange = range( new THREE.Vector3( - 2, 3, - 2 ), new THREE.Vector3( 2, 5, 2 ) );
+// default
+//const smokeColor = mix( color( 0x2c1501 ), color( 0x222222 ), positionLocal.y.mul( 3 ).clamp() );
+//const smokeColor0 = color( 0xf27d0c );
 
-				const timer = timerLocal( .2, 1/*100000*/ ); // @TODO: need to work with 64-bit precision
+// color1
+//const smokeColor = mix( color( 0x111111 ), color( 0x222222 ), positionLocal.y.mul( 3 ).clamp() );
+//const smokeColor0 = color( 0x663333 );
 
-				const lifeTime = timer.mul( lifeRange ).mod( 1 );
-				const scaleRange = range( .3, 2 );
-				const rotateRange = range( .1, 4 );
+const makeFire = (firecolor) => {
+	const smokeColor = mix( color( 0x888888 ), color( 0xffffff ), positionLocal.y.mul( 3 ).clamp() );
+	const smokeColor0 = color(firecolor);
+	const smokeNodeMaterial = new SpriteNodeMaterial();
+	smokeNodeMaterial.colorNode = mix( smokeColor0, smokeColor, life.mul( 2.5 ).min( 1 ) ).mul( fakeLightEffect );
+	smokeNodeMaterial.opacityNode = opacityNode;
+	smokeNodeMaterial.positionNode = offsetRange.mul( lifeTime );
+	smokeNodeMaterial.scaleNode = scaleRange.mul( lifeTime.max( 0.3 ) );
+	smokeNodeMaterial.depthWrite = false;
+	smokeNodeMaterial.transparent = true;
 
-				const life = lifeTime.div( lifeRange );
+	const smokeInstancedSprite = new THREE.Mesh( new THREE.PlaneGeometry( 1, 1 ), smokeNodeMaterial );
+	smokeInstancedSprite.scale.setScalar( 200 );
+	smokeInstancedSprite.isInstancedMesh = true;
+	smokeInstancedSprite.count = 100;
+	smokeInstancedSprite.position.y = 30;
+	return smokeInstancedSprite;
+};
 
-				const fakeLightEffect = positionLocal.y.oneMinus().max( 0.2 );
 
-				const textureNode = texture( map, uv().rotateUV( timer.mul( rotateRange ) ) );
+// create particles
+const cnt = 12;
+const r = 500;
+const setPos = (p, th, ratio) => {
+	p.position.x = Math.cos(th) * r * ratio;
+	p.position.z = Math.sin(th) * r * ratio;
+};
+for (let i = 0; i < cnt; i++) {
+	const p = new THREE.Group();
+	const th = Math.PI * 2 / cnt * i;
+	setPos(p, th, 1);
 
-				const opacityNode = textureNode.a.mul( life.oneMinus() );
+	const smokeInstancedSprite = makeFire(0xf26030);
+	p.add(smokeInstancedSprite);
 
-				const smokeColor = mix( color( 0x2c1501 ), color( 0x222222 ), positionLocal.y.mul( 3 ).clamp() );
+	//
+	/*
+	const fireNodeMaterial = new SpriteNodeMaterial();
+	fireNodeMaterial.colorNode = mix( color( 0xf72f17 ), color( 0x272f17 ), life );
+	//fireNodeMaterial.colorNode = mix( color( 0x2fb717 ), color( 0x2f17b7 ), life );
+	fireNodeMaterial.positionNode = range( new THREE.Vector3(-.5, 1, -.5), new THREE.Vector3(.5, 1, .5) ).mul( lifeTime );
+	fireNodeMaterial.scaleNode = smokeNodeMaterial.scaleNode;
+	fireNodeMaterial.opacityNode = opacityNode;
+	fireNodeMaterial.blending = THREE.AdditiveBlending;
+	fireNodeMaterial.transparent = true;
+	fireNodeMaterial.depthWrite = false;
 
-				// create particles
+	const fireInstancedSprite = new THREE.Mesh( new THREE.PlaneGeometry( 1, 1 ), fireNodeMaterial );
+	fireInstancedSprite.scale.setScalar( 100 );
+	fireInstancedSprite.isInstancedMesh = true;
+	fireInstancedSprite.count = 100;
+	fireInstancedSprite.position.y = 0;
+	fireInstancedSprite.renderOrder = 1;
+	p.add( fireInstancedSprite );
+	*/
 
-				const smokeNodeMaterial = new SpriteNodeMaterial();
-				smokeNodeMaterial.colorNode = mix( color( 0xf27d0c ), smokeColor, life.mul( 2.5 ).min( 1 ) ).mul( fakeLightEffect );
-				smokeNodeMaterial.opacityNode = opacityNode;
-				smokeNodeMaterial.positionNode = offsetRange.mul( lifeTime );
-				smokeNodeMaterial.scaleNode = scaleRange.mul( lifeTime.max( 0.3 ) );
-				smokeNodeMaterial.depthWrite = false;
-				smokeNodeMaterial.transparent = true;
+	scene.add(p);
+}
 
-				const smokeInstancedSprite = new THREE.Mesh( new THREE.PlaneGeometry( 1, 1 ), smokeNodeMaterial );
-				smokeInstancedSprite.scale.setScalar( 400 );
-				smokeInstancedSprite.isInstancedMesh = true;
-				smokeInstancedSprite.count = 2000;
-				scene.add( smokeInstancedSprite );
+const clkhour = makeFire(0x3060f2);
+scene.add(clkhour);
+const clkmin = makeFire(0x30f260);
+scene.add(clkmin);
+const clksec = makeFire(0xf2f260);
+scene.add(clksec);
 
-				//
+//
+/*
+const helper = new THREE.GridHelper( 3000, 40, 0x303030, 0x303030 );
+helper.position.y = 0;
+scene.add( helper );
+*/
 
-				const fireNodeMaterial = new SpriteNodeMaterial();
-				fireNodeMaterial.colorNode = mix( color( 0xb72f17 ), color( 0xb72f17 ), life );
-				fireNodeMaterial.positionNode = range( new THREE.Vector3( - 1, 1, - 1 ), new THREE.Vector3( 1, 2, 1 ) ).mul( lifeTime );
-				fireNodeMaterial.scaleNode = smokeNodeMaterial.scaleNode;
-				fireNodeMaterial.opacityNode = opacityNode;
-				fireNodeMaterial.blending = THREE.AdditiveBlending;
-				fireNodeMaterial.transparent = true;
-				fireNodeMaterial.depthWrite = false;
+//
 
-				const fireInstancedSprite = new THREE.Mesh( new THREE.PlaneGeometry( 1, 1 ), fireNodeMaterial );
-				fireInstancedSprite.scale.setScalar( 400 );
-				fireInstancedSprite.isInstancedMesh = true;
-				fireInstancedSprite.count = 100;
-				fireInstancedSprite.position.y = - 100;
-				fireInstancedSprite.renderOrder = 1;
-				scene.add( fireInstancedSprite );
+const renderer = new WebGPURenderer( { antialias: true, alpha: true } ); // renderer.xr が WebXRManagerじゃない!?
+//renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // isGLBufferAttributeが非対応で動かない
+renderer.setClearColor(new THREE.Color(0x222222));
+renderer.setPixelRatio( window.devicePixelRatio );
+renderer.setSize( window.innerWidth, window.innerHeight );
+renderer.setAnimationLoop( render );
+document.body.appendChild( renderer.domElement );
 
-				//
+//
 
-				const helper = new THREE.GridHelper( 3000, 40, 0x303030, 0x303030 );
-				helper.position.y = - 75;
-				scene.add( helper );
+const controls = new OrbitControls( camera, renderer.domElement );
+controls.maxDistance = 2700;
+controls.target.set( 0, 0, 0 );
+controls.update();
+camera.position.y = 800;
 
-				//
+//
+//document.body.appendChild(XRButton.createButton(renderer, { spaceType: "local" })); // 未対応
 
-				renderer = new WebGPURenderer( { antialias: true } );
-				renderer.setPixelRatio( window.devicePixelRatio );
-				renderer.setSize( window.innerWidth, window.innerHeight );
-				renderer.setAnimationLoop( render );
-				document.body.appendChild( renderer.domElement );
+window.addEventListener( 'resize', () => {
+	camera.aspect = innerWidth / innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize( innerWidth, innerHeight );
+});
 
-				//
+// gui
+/*
+const gui = new GUI();
+gui.add( timer, 'scale', 0, 1, 0.01 ).name( 'speed' );
+*/
 
-				controls = new OrbitControls( camera, renderer.domElement );
-				controls.maxDistance = 2700;
-				controls.target.set( 0, 500, 0 );
-				controls.update();
+function render() {
+	const clk = getClockPos();
+	setPos(clkhour, clk.hour, .5);
+	setPos(clkmin, clk.min, .7);
+	setPos(clksec, clk.sec, .8);
+	renderer.render( scene, camera );
+}
 
-				//
-
-				window.addEventListener( 'resize', onWindowResize );
-
-				// gui
-
-				const gui = new GUI();
-
-				gui.add( timer, 'scale', 0, 1, 0.01 ).name( 'speed' );
-
-			}
-
-			function onWindowResize() {
-
-				const { innerWidth, innerHeight } = window;
-
-				camera.aspect = innerWidth / innerHeight;
-				camera.updateProjectionMatrix();
-
-				renderer.setSize( innerWidth, innerHeight );
-
-			}
-
-			function render() {
-
-				renderer.render( scene, camera );
-
-			}
-
-		</script>
-	</body>
+document.body.onclick = () => renderer.domElement.requestFullscreen();
+</script>
+</body>
 </html>
