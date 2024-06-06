@@ -217,7 +217,11 @@ function render() {
   renderer.render( scene, camera );
 }
 
-document.body.onclick = () => renderer.domElement.requestFullscreen();
+document.body.onclick = (e) => {
+  if (e.target == renderer.domElement) {
+    renderer.domElement.requestFullscreen();
+  }
+};
 </script>
 </body>
 </html>
